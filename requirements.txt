@@ -1,0 +1,8 @@
+python-dotenv
+feedparser
+newspaper3k
+snscrape
+psycopg2-binary
+qdrant-client
+openai
+langfuse
