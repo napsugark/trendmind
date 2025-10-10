@@ -27,7 +27,7 @@ data/
 *.log
 
 # Environment variables
-.env
+*.env
 
 # Node.js (if applicable)
 node_modules/
