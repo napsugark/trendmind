@@ -1,10 +1,16 @@
+# Only officially supported RSS feeds
 https://garymarcus.substack.com/
-https://openai.com/research
 https://andrewng.substack.com/
+# Twitter handles - using official API with authentication
 https://x.com/ylecun
 https://x.com/sama
 https://x.com/emollick
-https://www.linkedin.com/in/andrewyng/
-https://www.linkedin.com/in/lexfridman/
 https://x.com/karpathy
-https://blog.google/technology/ai/
+https://x.com/elonmusk
+# RSS
+https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml
+
+https://www.theguardian.com/uk/technology/rss
+https://news.ycombinator.com/rss
+https://feeds.bbci.co.uk/news/technology/rss.xml
+https://www.theverge.com/rss/tech/index.xml

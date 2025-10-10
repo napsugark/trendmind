@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Collection Results - TrendMind{% endblock %}
+
+{% block content %}
+<h1>Data Collection Results</h1>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>Summary</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-2">
+                        <h3>{{ result.summary.total_sources }}</h3>
+                        <p>Total Sources</p>
+                    </div>
+                    <div class="col-md-2">
+                        <h3>{{ result.summary.successful_sources }}</h3>
+                        <p>Successful</p>
+                    </div>
+                    <div class="col-md-2">
+                        <h3>{{ result.summary.total_articles }}</h3>
+                        <p>Total Articles</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h3>{{ result.summary.new_articles }}</h3>
+                        <p>New Articles</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h3>{{ result.summary.cached_articles }}</h3>
+                        <p>Cached Articles</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <h3>Source Details</h3>
+        {% for source in result.sources %}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>
+                    <strong>{{ source.source_url }}</strong>
+                    <span class="badge bg-secondary">{{ source.source_type }}</span>
+                </span>
+                <span class="text-muted">{{ "%.2f"|format(source.processing_time) }}s</span>
+            </div>
+            <div class="card-body">
+                {% if source.error %}
+                    <div class="alert alert-danger">{{ source.error }}</div>
+                {% else %}
+                    <p>
+                        <strong>Articles:</strong> {{ source.articles|length }}
+                        ({{ source.new_count }} new, {{ source.cached_count }} cached)
+                    </p>
+                    
+                    {% if source.articles %}
+                    <details>
+                        <summary>View Articles ({{ source.articles|length }})</summary>
+                        <div class="mt-2">
+                            {% for article in source.articles[:5] %}
+                            <div class="border-start border-3 border-primary ps-3 mb-2">
+                                <h6>{{ article.title or "No Title" }}</h6>
+                                <small class="text-muted">{{ article.published or "No Date" }}</small>
+                                <p>{{ article.content|truncate(200) }}</p>
+                            </div>
+                            {% endfor %}
+                            {% if source.articles|length > 5 %}
+                            <p><em>... and {{ source.articles|length - 5 }} more articles</em></p>
+                            {% endif %}
+                        </div>
+                    </details>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="mt-4">
+    <a href="/" class="btn btn-primary">Collect More Data</a>
+    <a href="/dashboard" class="btn btn-outline-primary">View Dashboard</a>
+</div>
+{% endblock %}

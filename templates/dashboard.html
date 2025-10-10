@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - TrendMind{% endblock %}
+
+{% block content %}
+<h1>TrendMind Dashboard</h1>
+
+{% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+{% else %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Last 7 Days</h5>
+            </div>
+            <div class="card-body">
+                {% if stats_7d %}
+                    {% for source, count in stats_7d %}
+                    <div class="d-flex justify-content-between">
+                        <span>{{ source|truncate(40) }}</span>
+                        <span class="badge bg-primary">{{ count }}</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p>No data available</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Last 30 Days</h5>
+            </div>
+            <div class="card-body">
+                {% if stats_30d %}
+                    {% for source, count in stats_30d %}
+                    <div class="d-flex justify-content-between">
+                        <span>{{ source|truncate(40) }}</span>
+                        <span class="badge bg-success">{{ count }}</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p>No data available</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if recent_articles %}
+<div class="row">
+    <div class="col-md-12">
+        <h3>Recent Articles</h3>
+        {% for article in recent_articles %}
+        <div class="card mb-2">
+            <div class="card-body">
+                <h6>{{ article.get('title') or "No Title" }}</h6>
+                <small class="text-muted">
+                    {{ article.get('source_url') }} - {{ article.get('published_date') }}
+                </small>
+                <p>{{ (article.get('content') or '')|truncate(200) }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

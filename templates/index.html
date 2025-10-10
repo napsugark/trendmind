@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}TrendMind - AI Trend Data Collector{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <h1>TrendMind Data Collector</h1>
+        <p class="lead">Collect and analyze AI trend data from multiple sources</p>
+        
+        <form method="POST" action="/collect">
+            <div class="mb-3">
+                <label for="sources" class="form-label">Sources (URLs or handles)</label>
+                <textarea class="form-control" id="sources" name="sources" rows="10" 
+                          placeholder="Enter source URLs or Twitter handles, one per line or comma-separated:&#10;&#10;https://garymarcus.substack.com/&#10;https://x.com/karpathy&#10;https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml&#10;https://x.com/sama"></textarea>
+                <div class="form-text">Supports: Twitter handles, RSS feeds, Substack blogs</div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="days_back" class="form-label">Days Back</label>
+                <select class="form-select" id="days_back" name="days_back">
+                    <option value="1">1 day</option>
+                    <option value="3">3 days</option>
+                    <option value="7" selected>7 days</option>
+                    <option value="14">14 days</option>
+                    <option value="30">30 days</option>
+                </select>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Collect Data</button>
+        </form>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>Current Statistics</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Total Articles:</strong> {{ total_articles }}</p>
+                <p><strong>Active Sources:</strong> {{ source_count }}</p>
+                
+                {% if top_sources %}
+                <h6>Top Sources (7 days):</h6>
+                <ul class="list-unstyled">
+                    {% for source, count in top_sources %}
+                    <li>{{ source|truncate(30) }}: {{ count }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+                
+                <div class="mt-3">
+                    <a href="/docs" class="btn btn-outline-primary btn-sm">API Documentation</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

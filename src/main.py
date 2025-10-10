@@ -6,12 +6,19 @@ from scraper import scrape_source
 from summarizer import summarize_posts
 from db_postgres import connect_postgres, insert_posts
 from db_qdrant import embed_and_store
+from logger import get_logger, log_performance
 
 @observe()
+@log_performance
 def load_sources():
     """Load and return source URLs from the configuration file."""
+    logger = get_logger("main")
+    logger.info("Loading source URLs from configuration")
+    
     with open("data/sources.txt", "r") as f:
         sources = [line.strip() for line in f if line.strip()]
+    
+    logger.info(f"Loaded {len(sources)} sources: {sources}")
     
     # Log metadata to Langfuse
     langfuse_context.update_current_observation(
@@ -21,11 +28,16 @@ def load_sources():
     return sources
 
 @observe()
+@log_performance
 def scrape_all_sources(sources):
     """Scrape content from all configured sources."""
+    logger = get_logger("main")
+    logger.info(f"Starting scraping process for {len(sources)} sources")
+    
     all_posts = []
     
     for i, src in enumerate(sources):
+        logger.info(f"Scraping source {i+1}/{len(sources)}: {src}")
         print(f"Scraping: {src}")
         
         # Create a span for each source scraping
@@ -52,8 +64,12 @@ def scrape_all_sources(sources):
     return all_posts
 
 @observe()
+@log_performance
 def store_data(all_posts):
     """Store collected posts in both PostgreSQL and Qdrant."""
+    logger = get_logger("main")
+    logger.info(f"Starting data storage for {len(all_posts)} posts")
+    
     # Store in PostgreSQL
     with langfuse_context.observation(name="store_postgres") as observation:
         observation.update(input={"posts_count": len(all_posts)})
@@ -68,8 +84,12 @@ def store_data(all_posts):
         observation.update(output={"status": "success"})
 
 @observe()
+@log_performance
 def main():
     """Main pipeline for TrendMind: scrape, store, and summarize AI trend data."""
+    logger = get_logger("main")
+    logger.info("=== Starting TrendMind Pipeline ===")
+    
     load_dotenv()
     
     # Set session metadata for the entire run
@@ -90,9 +110,13 @@ def main():
     store_data(all_posts)
 
     # Summarize
+    logger.info("Starting summarization process")
     summary = summarize_posts(all_posts)
     print("\n===== Monthly Digest =====\n")
     print(summary)
+    
+    logger.info(f"Pipeline completed successfully. Generated summary: {len(summary) if summary else 0} characters")
+    logger.info("=== TrendMind Pipeline Complete ===")
     
     # Update trace with final results
     langfuse_context.update_current_trace(

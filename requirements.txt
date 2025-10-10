@@ -1,8 +1,30 @@
-python-dotenv
-feedparser
-newspaper3k
-snscrape
-psycopg2-binary
-qdrant-client
-openai
-langfuse
+# Environment variables
+python-dotenv>=1.0.0
+
+# RSS/blog scraping
+feedparser>=6.0.10
+newspaper3k>=0.2.8
+lxml>=4.9.3
+beautifulsoup4>=4.12.2
+
+# Twitter/X scraping
+git+https://github.com/JustAnotherArchivist/snscrape.git@master
+
+# Database
+psycopg2-binary>=2.9.9
+qdrant-client>=1.0.0
+
+# OpenAI API
+openai>=1.0.0
+
+# Observability
+langfuse>=0.3.0
+
+# Web frontend
+fastapi>=0.104.0
+uvicorn>=0.24.0
+jinja2>=3.1.2
+python-multipart>=0.0.6
+
+# Optional: for parsing HTML cleanly (used by newspaper3k)
+lxml_html_clean>=0.3
