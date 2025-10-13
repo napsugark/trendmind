@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 import os
 import time
 from dotenv import load_dotenv
-from utils.logger import get_logger, log_performance, log_database_metrics
+from backend.utils.logger import get_logger, log_performance, log_database_metrics
 
 load_dotenv()
 

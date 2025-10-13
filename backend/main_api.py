@@ -44,9 +44,9 @@ app = FastAPI(
 )
 
 # Setup templates
-templates_dir = Path("templates")
+templates_dir = Path("frontend/templates")
 templates_dir.mkdir(exist_ok=True)
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory="frontend/templates")
 
 # Setup static files (if needed)
 static_dir = Path("static")
@@ -401,293 +401,21 @@ async def startup_event():
     logger.info("Starting TrendMind FastAPI application")
     
     # Create templates if they don't exist
-    if not (templates_dir / "base.html").exists():
-        logger.info("Creating HTML templates...")
-        create_fastapi_templates()
-        logger.info("Templates created successfully")
-
-def create_fastapi_templates():
-    """Create HTML templates for FastAPI"""
-    
-    # Base template (same as before but with FastAPI URLs)
-    base_template = '''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}TrendMind Data Collector{% endblock %}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container">
-            <a class="navbar-brand" href="/">TrendMind</a>
-            <div class="navbar-nav">
-                <a class="nav-link" href="/">Home</a>
-                <a class="nav-link" href="/dashboard">Dashboard</a>
-                <a class="nav-link" href="/docs">API Docs</a>
-            </div>
-        </div>
-    </nav>
-    
-    <div class="container mt-4">
-        {% if error %}
-            <div class="alert alert-danger alert-dismissible fade show">
-                {{ error }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        {% endif %}
-        
-        {% block content %}{% endblock %}
-    </div>
-    
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>'''
-    
-    # Index template (updated for FastAPI)
-    index_template = '''{% extends "base.html" %}
-
-{% block title %}TrendMind - AI Trend Data Collector{% endblock %}
-
-{% block content %}
-<div class="row">
-    <div class="col-md-8">
-        <h1>TrendMind Data Collector</h1>
-        <p class="lead">Collect and analyze AI trend data from multiple sources</p>
-        
-        <form method="POST" action="/collect">
-            <div class="mb-3">
-                <label for="sources" class="form-label">Sources (URLs or handles)</label>
-                <textarea class="form-control" id="sources" name="sources" rows="10" 
-                          placeholder="Enter source URLs or Twitter handles, one per line or comma-separated:&#10;&#10;https://garymarcus.substack.com/&#10;https://x.com/karpathy&#10;https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml&#10;https://x.com/sama"></textarea>
-                <div class="form-text">Supports: Twitter handles, RSS feeds, Substack blogs</div>
-            </div>
-            
-            <div class="mb-3">
-                <label for="days_back" class="form-label">Days Back</label>
-                <select class="form-select" id="days_back" name="days_back">
-                    <option value="1">1 day</option>
-                    <option value="3">3 days</option>
-                    <option value="7" selected>7 days</option>
-                    <option value="14">14 days</option>
-                    <option value="30">30 days</option>
-                </select>
-            </div>
-            
-            <button type="submit" class="btn btn-primary">Collect Data</button>
-        </form>
-    </div>
-    
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-header">
-                <h5>Current Statistics</h5>
-            </div>
-            <div class="card-body">
-                <p><strong>Total Articles:</strong> {{ total_articles }}</p>
-                <p><strong>Active Sources:</strong> {{ source_count }}</p>
-                
-                {% if top_sources %}
-                <h6>Top Sources (7 days):</h6>
-                <ul class="list-unstyled">
-                    {% for source, count in top_sources %}
-                    <li>{{ source|truncate(30) }}: {{ count }}</li>
-                    {% endfor %}
-                </ul>
-                {% endif %}
-                
-                <div class="mt-3">
-                    <a href="/docs" class="btn btn-outline-primary btn-sm">API Documentation</a>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}'''
-    
-    # Results and dashboard templates (same as before)
-    results_template = '''{% extends "base.html" %}
-
-{% block title %}Collection Results - TrendMind{% endblock %}
-
-{% block content %}
-<h1>Data Collection Results</h1>
-
-<div class="row mb-4">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header">
-                <h5>Summary</h5>
-            </div>
-            <div class="card-body">
-                <div class="row text-center">
-                    <div class="col-md-2">
-                        <h3>{{ result.summary.total_sources }}</h3>
-                        <p>Total Sources</p>
-                    </div>
-                    <div class="col-md-2">
-                        <h3>{{ result.summary.successful_sources }}</h3>
-                        <p>Successful</p>
-                    </div>
-                    <div class="col-md-2">
-                        <h3>{{ result.summary.total_articles }}</h3>
-                        <p>Total Articles</p>
-                    </div>
-                    <div class="col-md-3">
-                        <h3>{{ result.summary.new_articles }}</h3>
-                        <p>New Articles</p>
-                    </div>
-                    <div class="col-md-3">
-                        <h3>{{ result.summary.cached_articles }}</h3>
-                        <p>Cached Articles</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-md-12">
-        <h3>Source Details</h3>
-        {% for source in result.sources %}
-        <div class="card mb-3">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span>
-                    <strong>{{ source.source_url }}</strong>
-                    <span class="badge bg-secondary">{{ source.source_type }}</span>
-                </span>
-                <span class="text-muted">{{ "%.2f"|format(source.processing_time) }}s</span>
-            </div>
-            <div class="card-body">
-                {% if source.error %}
-                    <div class="alert alert-danger">{{ source.error }}</div>
-                {% else %}
-                    <p>
-                        <strong>Articles:</strong> {{ source.articles|length }}
-                        ({{ source.new_count }} new, {{ source.cached_count }} cached)
-                    </p>
-                    
-                    {% if source.articles %}
-                    <details>
-                        <summary>View Articles ({{ source.articles|length }})</summary>
-                        <div class="mt-2">
-                            {% for article in source.articles[:5] %}
-                            <div class="border-start border-3 border-primary ps-3 mb-2">
-                                <h6>{{ article.title or "No Title" }}</h6>
-                                <small class="text-muted">{{ article.published or "No Date" }}</small>
-                                <p>{{ article.content|truncate(200) }}</p>
-                            </div>
-                            {% endfor %}
-                            {% if source.articles|length > 5 %}
-                            <p><em>... and {{ source.articles|length - 5 }} more articles</em></p>
-                            {% endif %}
-                        </div>
-                    </details>
-                    {% endif %}
-                {% endif %}
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-</div>
-
-<div class="mt-4">
-    <a href="/" class="btn btn-primary">Collect More Data</a>
-    <a href="/dashboard" class="btn btn-outline-primary">View Dashboard</a>
-</div>
-{% endblock %}'''
-    
-    dashboard_template = '''{% extends "base.html" %}
-
-{% block title %}Dashboard - TrendMind{% endblock %}
-
-{% block content %}
-<h1>TrendMind Dashboard</h1>
-
-{% if error %}
-    <div class="alert alert-danger">{{ error }}</div>
-{% else %}
-<div class="row mb-4">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5>Last 7 Days</h5>
-            </div>
-            <div class="card-body">
-                {% if stats_7d %}
-                    {% for source, count in stats_7d %}
-                    <div class="d-flex justify-content-between">
-                        <span>{{ source|truncate(40) }}</span>
-                        <span class="badge bg-primary">{{ count }}</span>
-                    </div>
-                    {% endfor %}
-                {% else %}
-                    <p>No data available</p>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5>Last 30 Days</h5>
-            </div>
-            <div class="card-body">
-                {% if stats_30d %}
-                    {% for source, count in stats_30d %}
-                    <div class="d-flex justify-content-between">
-                        <span>{{ source|truncate(40) }}</span>
-                        <span class="badge bg-success">{{ count }}</span>
-                    </div>
-                    {% endfor %}
-                {% else %}
-                    <p>No data available</p>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
-
-{% if recent_articles %}
-<div class="row">
-    <div class="col-md-12">
-        <h3>Recent Articles</h3>
-        {% for article in recent_articles %}
-        <div class="card mb-2">
-            <div class="card-body">
-                <h6>{{ article.get('title') or "No Title" }}</h6>
-                <small class="text-muted">
-                    {{ article.get('source_url') }} - {{ article.get('published_date') }}
-                </small>
-                <p>{{ (article.get('content') or '')|truncate(200) }}</p>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-</div>
-{% endif %}
-{% endif %}
-{% endblock %}'''
-    
-    # Write templates to files
-    (templates_dir / "base.html").write_text(base_template)
-    (templates_dir / "index.html").write_text(index_template)
-    (templates_dir / "results.html").write_text(results_template)
-    (templates_dir / "dashboard.html").write_text(dashboard_template)
+    # if not (templates_dir / "base.html").exists():
+    #     logger.info("Creating HTML templates...")
+    #     create_fastapi_templates()
+    #     logger.info("Templates created successfully")
 
 if __name__ == "__main__":
     print("Starting TrendMind FastAPI Server...")
-    print("Web UI: http://localhost:8080")
-    print("API Docs: http://localhost:8080/docs")
+    print("Web UI: http://localhost:8000")
+    print("API Docs: http://localhost:8000/docs")
     print("Press Ctrl+C to stop")
     
     uvicorn.run(
         "fastapi_frontend:app",
         host="0.0.0.0",
-        port=8080,
+        port=8000,
         reload=True,
         log_level="info"
     )

@@ -6,7 +6,7 @@ from typing import Optional
 
 
 def configure_logger(name: str = "TrendMindLogger", 
-                    logs_dir: str = "logs", 
+                    logs_dir: str = "data/logs", 
                     enable_email: bool = False,
                     email_config: Optional[dict] = None) -> logging.Logger:
     """
