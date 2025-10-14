@@ -199,19 +199,16 @@ class DataOrchestrator:
                 new_articles = scrape_result.get('results', [])
                 
                 if new_articles:
-                    # Convert to database format
-                    db_articles = self.format_articles_for_db(new_articles, source_type)
-                    
-                    # Insert into database
-                    inserted_count = insert_posts(db_articles)
+            
+                    inserted_count = scrape_result.get('new_count', 0)  # Use new_count from scraper
                     
                     result['articles'] = new_articles
                     result['new_count'] = inserted_count
                     self.stats['new_articles'] += inserted_count
                     
-                    self.logger.info(f"Inserted {inserted_count} new articles from {source_url}")
+                    self.logger.info(f"Processed {len(new_articles)} total articles from {source_url} ({inserted_count} new, {len(new_articles) - inserted_count} cached)")
                 else:
-                    self.logger.info(f"No new articles found for {source_url}")
+                    self.logger.info(f"No articles found for {source_url}")
             
             self.stats['sources_processed'] += 1
             
@@ -226,13 +223,14 @@ class DataOrchestrator:
         
         return result
     
-    def format_articles_for_db(self, articles: List[Dict], source_type: str) -> List[Dict[str, Any]]:
+    def format_articles_for_db(self, articles: List[Dict], source_type: str, source_url: str) -> List[Dict[str, Any]]:
         """
         Convert scraped articles to database format.
         
         Args:
             articles: List of scraped articles
             source_type: Type of source
+            source_url: Source URL to use for all articles
             
         Returns:
             List of articles formatted for database insertion
@@ -240,7 +238,6 @@ class DataOrchestrator:
         db_articles = []
         
         for article in articles:
-            # Parse published date
             published_date = None
             if article.get('published'):
                 if isinstance(article['published'], str):
@@ -250,7 +247,7 @@ class DataOrchestrator:
             
             db_article = {
                 'source_type': source_type,
-                'source_url': article.get('source', ''),
+                'source_url': source_url,  
                 'title': article.get('title'),
                 'content': article.get('content', ''),
                 'link': article.get('link'),

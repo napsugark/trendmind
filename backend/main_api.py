@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
-FastAPI Frontend Interface for TrendMind
+TrendMind Backend API
 
-This provides a modern REST API and web interface for TrendMind data collection.
-Features automatic API documentation, data validation, and async support.
+Provides AI-powered trend analysis through a complete workflow:
+1. Data Collection (Scraping)
+2. Topic Clustering (LLM)
+3. Summarization (LLM) 
+4. Structured Results
 
 Usage:
-    python fastapi_frontend.py
+    python main_api.py
     
 Then visit:
-    - Web UI: http://localhost:8000
     - API Docs: http://localhost:8000/docs
-    - OpenAPI Schema: http://localhost:8000/openapi.json
+    - Health Check: http://localhost:8000/health
 """
 
 import os
@@ -22,8 +24,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Form, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, validator
 import uvicorn
 
@@ -32,28 +33,29 @@ sys.path.append(os.path.dirname(__file__))
 
 from get_data import DataOrchestrator
 from src.db_postgres import get_article_count_by_source, get_articles_for_processing
+from src.clustering import cluster_articles
+from src.summarizer import summarize_clusters
 from utils.logger import get_logger
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="TrendMind Data Collector",
-    description="AI trend data collection and analysis API",
-    version="1.0.0",
+    title="TrendMind Backend API",
+    description="AI-powered trend analysis: Scrape → Cluster → Summarize → Results",
+    version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
 
-# Setup templates
-templates_dir = Path("frontend/templates")
-templates_dir.mkdir(exist_ok=True)
-templates = Jinja2Templates(directory="frontend/templates")
+# Add CORS middleware for frontend access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify your frontend domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Setup static files (if needed)
-static_dir = Path("static")
-static_dir.mkdir(exist_ok=True)
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-logger = get_logger("fastapi_frontend")
+logger = get_logger("main_api")
 
 # Pydantic models for request/response validation
 class SourcesRequest(BaseModel):
@@ -98,12 +100,125 @@ class StatsResponse(BaseModel):
     source_count: int
     days_back: int
 
+class AnalyzeRequest(BaseModel):
+    """Request model for trend analysis"""
+    sources: List[str]
+    days_back: Optional[int] = 7
+    max_clusters: Optional[int] = 5
+    
+    @validator('sources')
+    def validate_sources(cls, v):
+        if not v:
+            raise ValueError('At least one source must be provided')
+        return v
+    
+    @validator('days_back')
+    def validate_days_back(cls, v):
+        if v is not None and (v < 1 or v > 365):
+            raise ValueError('days_back must be between 1 and 365')
+        return v
+
+class ClusterSummary(BaseModel):
+    """Summary of a topic cluster"""
+    topic_name: str
+    article_count: int
+    summary: str
+    key_points: List[str]
+    sources: List[str]
+
+class AnalyzeResponse(BaseModel):
+    """Response model for trend analysis"""
+    success: bool
+    clusters: List[ClusterSummary]
+    total_articles: int
+    processing_time: float
+    timestamp: str
+
 # Dependency to get orchestrator instance
 def get_orchestrator():
     """Dependency to provide DataOrchestrator instance"""
     return DataOrchestrator()
 
-# API Routes
+# Main Analysis Endpoint
+@app.post("/analyze", response_model=AnalyzeResponse)
+async def analyze_trends(
+    request: AnalyzeRequest,
+    orchestrator: DataOrchestrator = Depends(get_orchestrator)
+):
+    """
+    Complete trend analysis workflow:
+    1. Scrape data from sources
+    2. Cluster articles by topic using LLM
+    3. Generate summaries for each cluster
+    4. Return structured results
+    
+    - **sources**: List of source URLs or Twitter handles
+    - **days_back**: Number of days to look back (1-365)
+    - **max_clusters**: Maximum number of topic clusters (default: 5)
+    
+    Returns clustered and summarized trend analysis.
+    """
+    import time
+    start_time = time.time()
+    
+    try:
+        logger.info(f"Starting trend analysis: {len(request.sources)} sources, {request.days_back} days, max {request.max_clusters} clusters")
+        
+        # Step 1: Scrape data
+        logger.info("Step 1: Scraping data from sources...")
+        scrape_result = orchestrator.process_all_sources(request.sources, request.days_back)
+        
+        # Collect all articles
+        all_articles = []
+        for source_result in scrape_result['sources']:
+            all_articles.extend(source_result['articles'])
+        
+        if not all_articles:
+            return AnalyzeResponse(
+                success=True,
+                clusters=[],
+                total_articles=0,
+                processing_time=time.time() - start_time,
+                timestamp=datetime.utcnow().isoformat()
+            )
+        
+        logger.info(f"Collected {len(all_articles)} articles")
+        
+        # Step 2: Cluster articles by topic
+        logger.info("Step 2: Clustering articles by topic...")
+        clusters = cluster_articles(all_articles, max_clusters=request.max_clusters)
+        
+        # Step 3: Summarize each cluster
+        logger.info("Step 3: Generating cluster summaries...")
+        cluster_summaries = summarize_clusters(clusters)
+        
+        # Step 4: Format response
+        response_clusters = []
+        for cluster_summary in cluster_summaries:
+            response_clusters.append(ClusterSummary(
+                topic_name=cluster_summary['topic_name'],
+                article_count=cluster_summary['article_count'],
+                summary=cluster_summary['summary'],
+                key_points=cluster_summary['key_points'],
+                sources=cluster_summary['sources']
+            ))
+        
+        processing_time = time.time() - start_time
+        logger.info(f"Analysis completed in {processing_time:.2f}s: {len(response_clusters)} clusters")
+        
+        return AnalyzeResponse(
+            success=True,
+            clusters=response_clusters,
+            total_articles=len(all_articles),
+            processing_time=processing_time,
+            timestamp=datetime.utcnow().isoformat()
+        )
+        
+    except Exception as e:
+        logger.error(f"Analysis error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Legacy API Routes (for backward compatibility)
 @app.post("/api/collect", response_model=CollectionResponse)
 async def collect_data(
     request: SourcesRequest, 
@@ -272,117 +387,7 @@ async def get_recent_articles(
         logger.error(f"API recent articles error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Web UI Routes
-@app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
-    """Main page with data collection form"""
-    try:
-        # Get basic statistics for display
-        stats = get_article_count_by_source(days_back=7)
-        
-        # Handle case where stats might be None or empty
-        if stats and isinstance(stats, dict):
-            total_articles = sum(stats.values())
-            source_count = len(stats)
-            top_sources = list(stats.items())[:5]
-        else:
-            total_articles = 0
-            source_count = 0
-            top_sources = []
-        
-        return templates.TemplateResponse("index.html", {
-            "request": request,
-            "total_articles": total_articles,
-            "source_count": source_count,
-            "top_sources": top_sources
-        })
-    except Exception as e:
-        logger.error(f"Index page error: {str(e)}")
-        return templates.TemplateResponse("index.html", {
-            "request": request,
-            "error": str(e),
-            "total_articles": 0,
-            "source_count": 0,
-            "top_sources": []
-        })
-
-@app.post("/collect", response_class=HTMLResponse)
-async def web_collect_data(
-    request: Request,
-    sources: str = Form(...),
-    days_back: int = Form(7),
-    orchestrator: DataOrchestrator = Depends(get_orchestrator)
-):
-    """Handle form submission for data collection"""
-    try:
-        if not sources.strip():
-            return templates.TemplateResponse("index.html", {
-                "request": request,
-            "error": "Please provide at least one source URL or handle",
-            "total_articles": 0,
-            "source_count": 0,
-            "top_sources": []
-        })        # Parse sources (can be newline or comma separated)
-        if '\\n' in sources:
-            source_list = [s.strip() for s in sources.split('\\n') if s.strip()]
-        else:
-            source_list = [s.strip() for s in sources.split(',') if s.strip()]
-        
-        # Process sources
-        result = orchestrator.process_all_sources(source_list, days_back)
-        
-        return templates.TemplateResponse("results.html", {
-            "request": request,
-            "result": result
-        })
-        
-    except Exception as e:
-        logger.error(f"Web collect error: {str(e)}")
-        return templates.TemplateResponse("index.html", {
-            "request": request,
-            "error": f"Error during data collection: {str(e)}",
-            "total_articles": 0,
-            "source_count": 0,
-            "top_sources": []
-        })
-
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request):
-    """Dashboard with statistics and recent articles"""
-    try:
-        # Get statistics for different time periods
-        stats_7d = get_article_count_by_source(7)
-        stats_30d = get_article_count_by_source(30)
-        
-        # Handle case where stats might be None or not dict
-        if stats_7d and isinstance(stats_7d, dict):
-            stats_7d_list = list(stats_7d.items())
-            sources = list(stats_7d.keys())[:10]
-        else:
-            stats_7d_list = []
-            sources = []
-            
-        if stats_30d and isinstance(stats_30d, dict):
-            stats_30d_list = list(stats_30d.items())[:10]
-        else:
-            stats_30d_list = []
-        
-        # Get recent articles
-        recent_articles = get_articles_for_processing(sources, 3) if sources else []
-        
-        return templates.TemplateResponse("dashboard.html", {
-            "request": request,
-            "stats_7d": stats_7d_list,
-            "stats_30d": stats_30d_list,
-            "recent_articles": recent_articles[:20]  # Limit to 20 for display
-        })
-        
-    except Exception as e:
-        logger.error(f"Dashboard error: {str(e)}")
-        return templates.TemplateResponse("dashboard.html", {
-            "request": request,
-            "error": str(e)
-        })
+# Utility Endpoints
 
 # Health check endpoint
 @app.get("/health")
@@ -398,22 +403,18 @@ async def health_check():
 @app.on_event("startup")
 async def startup_event():
     """Initialize application on startup"""
-    logger.info("Starting TrendMind FastAPI application")
-    
-    # Create templates if they don't exist
-    # if not (templates_dir / "base.html").exists():
-    #     logger.info("Creating HTML templates...")
-    #     create_fastapi_templates()
-    #     logger.info("Templates created successfully")
+    logger.info("Starting TrendMind Backend API")
+    logger.info("Workflow: Scrape → Cluster → Summarize → Results")
 
 if __name__ == "__main__":
-    print("Starting TrendMind FastAPI Server...")
-    print("Web UI: http://localhost:8000")
+    print("Starting TrendMind Backend API...")
     print("API Docs: http://localhost:8000/docs")
+    print("Health Check: http://localhost:8000/health")
+    print("Main Endpoint: POST /analyze")
     print("Press Ctrl+C to stop")
     
     uvicorn.run(
-        "fastapi_frontend:app",
+        "main_api:app",
         host="0.0.0.0",
         port=8000,
         reload=True,
