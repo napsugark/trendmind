@@ -1,25 +1,26 @@
 import os
 from openai import AzureOpenAI
-from langfuse import observe
+from langfuse import observe, Langfuse
 from typing import List, Dict, Any
 import json
-from backend.utils.logger import get_logger, log_performance
+from utils.logger import get_logger, log_performance
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
 
-# Initialize Azure OpenAI client
+# Initialize clients
 client = AzureOpenAI(
     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
     api_key=os.getenv("AZURE_OPENAI_API_KEY"),
     api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
 )
+langfuse = Langfuse()
 DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
 
 
 @observe()
 @log_performance
-def cluster_articles(articles: List[Dict[str, Any]], max_clusters: int = 5) -> List[Dict[str, Any]]:
+def cluster_articles(articles: List[Dict[str, Any]], max_clusters: int = 2) -> List[Dict[str, Any]]:
     """
     Use LLM to cluster articles by topic.
     
@@ -47,7 +48,19 @@ def cluster_articles(articles: List[Dict[str, Any]], max_clusters: int = 5) -> L
         }
         article_summaries.append(summary)
     
-    prompt = f"""You are analyzing articles from various AI news sources. Group these {len(articles)} articles into 5-{max_clusters} coherent topic clusters.
+    # Get prompt from Langfuse with fallback
+    try:
+        prompt_template = langfuse.get_prompt("trendmind-clustering-prompt", version=None)  # Latest version
+        prompt = prompt_template.compile(
+            num_articles=len(articles),
+            max_clusters=max_clusters,
+            articles_json=json.dumps(article_summaries, indent=2)
+        )
+        logger.debug(f"Using Langfuse prompt version: {prompt_template.version}")
+    except Exception as e:
+        logger.warning(f"Failed to fetch Langfuse prompt, using fallback: {e}")
+        # Fallback to hardcoded prompt
+        prompt = f"""You are analyzing articles from various AI news sources. Group these {len(articles)} articles into 2-{max_clusters} coherent topic clusters.
 
 Articles to cluster:
 {json.dumps(article_summaries, indent=2)}
