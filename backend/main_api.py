@@ -104,7 +104,6 @@ class AnalyzeRequest(BaseModel):
     """Request model for trend analysis"""
     sources: List[str]
     days_back: Optional[int] = 7
-    max_clusters: Optional[int] = 5
     
     @validator('sources')
     def validate_sources(cls, v):
@@ -123,7 +122,6 @@ class ClusterSummary(BaseModel):
     topic_name: str
     article_count: int
     summary: str
-    key_points: List[str]
     sources: List[str]
 
 class AnalyzeResponse(BaseModel):
@@ -162,7 +160,8 @@ async def analyze_trends(
     start_time = time.time()
     
     try:
-        logger.info(f"Starting trend analysis: {len(request.sources)} sources, {request.days_back} days, max {request.max_clusters} clusters")
+        max_clusters = 5  # Hardcoded value
+        logger.info(f"Starting trend analysis: {len(request.sources)} sources, {request.days_back} days, max {max_clusters} clusters")
         
         # Step 1: Scrape data
         logger.info("Step 1: Scraping data from sources...")
@@ -184,12 +183,41 @@ async def analyze_trends(
         
         logger.info(f"Collected {len(all_articles)} articles")
         
-        # Step 2: Cluster articles by topic
-        logger.info("Step 2: Clustering articles by topic...")
-        clusters = cluster_articles(all_articles, max_clusters=request.max_clusters)
+        # Step 2: Filter AI-relevant articles
+        logger.info("Step 2: Filtering AI-relevant articles...")
+        from src.content_filter import filter_ai_relevant_articles, quick_ai_keyword_filter
         
-        # Step 3: Summarize each cluster
-        logger.info("Step 3: Generating cluster summaries...")
+        # Quick keyword pre-filter (optional but faster)
+        keyword_filtered = quick_ai_keyword_filter(all_articles)
+        
+        # LLM-based AI relevance filter
+        ai_articles = filter_ai_relevant_articles(keyword_filtered)
+        
+        # Optional: Generate test dataset for evaluation 
+        from src.test_dataset_generator import create_ai_filter_test_dataset
+        test_dataset_path = create_ai_filter_test_dataset(all_articles)
+        logger.info(f"Test dataset created: {test_dataset_path}")
+        
+        if not ai_articles:
+            logger.warning("No AI-relevant articles found after filtering")
+            return AnalyzeResponse(
+                success=True,
+                clusters=[],
+                total_articles=len(all_articles),
+                processing_time=time.time() - start_time,
+                timestamp=datetime.utcnow().isoformat()
+            )
+        
+        logger.info(f"Filtered to {len(ai_articles)} AI-relevant articles ({len(ai_articles)/len(all_articles)*100:.1f}%)")
+        
+        # Step 3: Cluster articles by topic
+        # Adjust max_clusters based on article count to avoid empty clusters
+        dynamic_max_clusters = min(max_clusters, max(1, len(ai_articles) // 2))  # At least 2 articles per cluster
+        logger.info(f"Step 3: Clustering articles by topic (max {dynamic_max_clusters} clusters for {len(ai_articles)} articles)...")
+        clusters = cluster_articles(ai_articles, max_clusters=dynamic_max_clusters)
+        
+        # Step 4: Summarize each cluster
+        logger.info("Step 4: Generating cluster summaries...")
         cluster_summaries = summarize_clusters(clusters)
         
         # Step 4: Format response
@@ -199,12 +227,11 @@ async def analyze_trends(
                 topic_name=cluster_summary['topic_name'],
                 article_count=cluster_summary['article_count'],
                 summary=cluster_summary['summary'],
-                key_points=cluster_summary['key_points'],
                 sources=cluster_summary['sources']
             ))
         
         processing_time = time.time() - start_time
-        logger.info(f"Analysis completed in {processing_time:.2f}s: {len(response_clusters)} clusters")
+        logger.info(f"Analysis completed in {processing_time:.2f}s: {len(cluster_summaries)} clusters (max {max_clusters})")
         
         return AnalyzeResponse(
             success=True,
