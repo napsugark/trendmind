@@ -12,6 +12,7 @@ venv39/
 dist/
 build/
 *.json
+*.csv
 data/
 
 # Jupyter Notebooks
