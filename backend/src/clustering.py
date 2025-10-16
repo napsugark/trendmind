@@ -9,7 +9,9 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())
 
 # Initialize clients
-client = AzureOpenAI(
+from langfuse.openai import openai
+
+client = openai.AzureOpenAI(
     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
     api_key=os.getenv("AZURE_OPENAI_API_KEY"),
     api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
@@ -25,7 +27,7 @@ def cluster_articles(articles: List[Dict[str, Any]], max_clusters: int = 2) -> L
     Use LLM to cluster articles by topic.
     
     Args:
-        articles: List of article dictionaries with 'title', 'content', 'source_url'
+        articles: List of article dictionaries with 'title', 'content', 'link' (preferred) or 'source_url'
         max_clusters: Maximum number of clusters to create
         
     Returns:
@@ -43,14 +45,14 @@ def cluster_articles(articles: List[Dict[str, Any]], max_clusters: int = 2) -> L
         summary = {
             "id": i,
             "title": article.get('title', 'No Title'),
-            "source": article.get('source_url', 'Unknown'),
+            "source": article.get('link') or article.get('source_url', 'Unknown'),
             "snippet": article.get('content', '')[:200]  # First 200 chars
         }
         article_summaries.append(summary)
     
     # Get prompt from Langfuse with fallback
     try:
-        prompt_template = langfuse.get_prompt("trendmind-clustering-prompt", version=None)  # Latest version
+        prompt_template = langfuse.get_prompt("trendmind-clustering-prompt", label="latest")  # Latest version
         prompt = prompt_template.compile(
             num_articles=len(articles),
             max_clusters=max_clusters,
@@ -59,8 +61,8 @@ def cluster_articles(articles: List[Dict[str, Any]], max_clusters: int = 2) -> L
         logger.debug(f"Using Langfuse prompt version: {prompt_template.version}")
     except Exception as e:
         logger.warning(f"Failed to fetch Langfuse prompt, using fallback: {e}")
-        # Fallback to hardcoded prompt
-        prompt = f"""You are analyzing articles from various AI news sources. Group these {len(articles)} articles into 2-{max_clusters} coherent topic clusters.
+                # Fallback to hardcoded prompt
+        prompt = f"""You are analyzing articles from various AI news sources. Group these {len(articles)} articles into 2-{max_clusters} meaningful topic clusters based on natural themes.
 
 Articles to cluster:
 {json.dumps(article_summaries, indent=2)}
@@ -79,8 +81,11 @@ Return a JSON object with this structure:
 Rules:
 - Each article should belong to exactly one cluster
 - Topic names should be concise (2-5 words)
-- Aim for 5-8 clusters depending on topic diversity
-- Group by semantic similarity, not just keywords
+- Create 2-{max_clusters} clusters based on natural topic groupings
+- Group by semantic similarity and genuine themes
+- If articles naturally form fewer clusters, use fewer clusters (don't force artificial splits)
+- Each cluster should have at least 1 article
+- Prioritize meaningful groupings over hitting exact cluster count
 """
 
     try:
@@ -158,7 +163,7 @@ def summarize_cluster(cluster: Dict[str, Any]) -> Dict[str, Any]:
     
     # Combine article content (limit to avoid token limits)
     combined_content = "\n\n---\n\n".join([
-        f"Source: {a.get('source_url', 'Unknown')}\n"
+        f"Source: {a.get('link') or a.get('source_url', 'Unknown')}\n"
         f"Title: {a.get('title', 'No Title')}\n"
         f"Content: {a.get('content', '')[:500]}"  # Limit each article
         for a in articles[:10]  # Max 10 articles per cluster
@@ -190,8 +195,8 @@ Keep it concise but informative."""
         
         summary_text = response.choices[0].message.content
         
-        # Extract unique sources
-        sources = list(set(a.get('source_url', 'Unknown') for a in articles))
+        # Extract unique sources - prefer 'link' over 'source_url'
+        sources = list(set(a.get('link') or a.get('source_url', 'Unknown') for a in articles))
         
         logger.info(f"Generated summary for {topic_name}: {len(summary_text)} chars")
         

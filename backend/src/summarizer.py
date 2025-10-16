@@ -5,7 +5,9 @@ from utils.logger import get_logger, log_performance, log_summary_metrics
 from typing import List, Dict, Any
 
 # Initialize clients
-client = AzureOpenAI(
+from langfuse.openai import openai
+
+client = openai.AzureOpenAI(
     api_key=os.getenv("AZURE_OPENAI_API_KEY"),
     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
     api_version=os.getenv("AZURE_OPENAI_API_VERSION")
@@ -35,7 +37,7 @@ def summarize_posts(posts):
     
     # Get prompt from Langfuse with fallback
     try:
-        prompt_template = langfuse.get_prompt("trendmind-monthly-digest-prompt", version=None)
+        prompt_template = langfuse.get_prompt("trendmind-monthly-digest-prompt", version="latest")
         prompt = prompt_template.compile(
             combined_text=combined_text[:12000]
         )
@@ -92,7 +94,7 @@ def summarize_clusters(clusters: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         clusters: List of cluster dictionaries from clustering.py
         
     Returns:
-        List of cluster summaries with topic_name, summary, key_points, etc.
+        List of cluster summaries with topic_name, summary, sources, etc.
     """
     logger = get_logger("summarizer")
     logger.info(f"Summarizing {len(clusters)} clusters")
@@ -110,14 +112,16 @@ def summarize_clusters(clusters: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             for article in cluster.get('articles', []):
                 if article.get('content'):
                     articles_text.append(f"Title: {article.get('title', 'No title')}\nContent: {article['content'][:500]}")
-                if article.get('source_url'):
-                    sources.add(article['source_url'])
+                # Prefer 'link' over 'source_url' when available
+                source = article.get('link') or article.get('source_url')
+                if source:
+                    sources.add(source)
             
             combined_text = "\n\n".join(articles_text[:10])  # Limit to 10 articles per cluster
             
             # Get prompt from Langfuse with fallback
             try:
-                prompt_template = langfuse.get_prompt("trendmind-cluster-summary-prompt", version=None)
+                prompt_template = langfuse.get_prompt("trendmind-cluster-summary-prompt", label="latest")
                 prompt = prompt_template.compile(
                     topic_name=cluster.get('topic_name', 'this topic'),
                     combined_text=combined_text[:8000]
@@ -127,16 +131,12 @@ def summarize_clusters(clusters: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 logger.warning(f"Failed to fetch Langfuse cluster summary prompt, using fallback: {e}")
                 # Fallback to hardcoded prompt
                 prompt = f"""
-                Analyze the following articles about "{cluster.get('topic_name', 'this topic')}" and provide:
-                1. A concise summary (2-3 sentences)
-                2. Key insights and trends (3-5 bullet points)
+                Analyze the following articles about "{cluster.get('topic_name', 'this topic')}" and provide a concise summary (3-4 sentences).
                 
                 Articles:
                 {combined_text[:8000]}
                 
-                Please format your response as:
-                SUMMARY: [your summary here]
-                KEY_POINTS: [bullet point 1] | [bullet point 2] | [bullet point 3] | etc.
+                Focus on the main themes, developments, and key points from these articles. Be clear and informative.
                 """
             
             response = client.chat.completions.create(
@@ -151,29 +151,13 @@ def summarize_clusters(clusters: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             
             content = response.choices[0].message.content
             
-            # Parse response
-            summary = ""
-            key_points = []
-            
-            lines = content.split('\n')
-            for line in lines:
-                if line.startswith('SUMMARY:'):
-                    summary = line.replace('SUMMARY:', '').strip()
-                elif line.startswith('KEY_POINTS:'):
-                    points_text = line.replace('KEY_POINTS:', '').strip()
-                    key_points = [p.strip() for p in points_text.split('|') if p.strip()]
-            
-            # Fallback if parsing fails
-            if not summary:
-                summary = content.split('\n')[0] if content else "Summary not available"
-            if not key_points:
-                key_points = ["Key insights not available"]
+            # Use the LLM response directly as summary
+            summary = content.strip() if content else "Summary not available"
             
             cluster_summary = {
                 'topic_name': cluster.get('topic_name', f'Topic {i+1}'),
                 'article_count': len(cluster.get('articles', [])),
                 'summary': summary,
-                'key_points': key_points,
                 'sources': list(sources)
             }
             

@@ -109,7 +109,7 @@
                         <div class="form-text">Supports Twitter, RSS, Substack</div>
                     </div>
                     <div class="row mb-3">
-                        <div class="col-md-6">
+                        <div class="col-md-12">
                             <label for="days_back" class="form-label">Days Back</label>
                             <select class="form-select" id="days_back">
                                 <option value="1">1 day</option>
@@ -117,15 +117,6 @@
                                 <option value="7" selected>7 days</option>
                                 <option value="14">14 days</option>
                                 <option value="30">30 days</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="max_clusters" class="form-label">Max Clusters</label>
-                            <select class="form-select" id="max_clusters">
-                                <option value="3">3</option>
-                                <option value="5" selected>5</option>
-                                <option value="8">8</option>
-                                <option value="10">10</option>
                             </select>
                         </div>
                     </div>
@@ -174,7 +165,6 @@
         async function runAnalysis() {
             const sources = document.getElementById('sources').value.trim().split('\n').filter(s => s.trim());
             const days_back = parseInt(document.getElementById('days_back').value);
-            const max_clusters = parseInt(document.getElementById('max_clusters').value);
 
             if (sources.length === 0) {
                 showError('Please provide at least one source URL or handle');
@@ -190,9 +180,10 @@
             // Simulate loading steps
             const steps = [
                 'Step 1: Scraping data from sources...',
-                'Step 2: Clustering articles by topic...',
-                'Step 3: Generating AI summaries...',
-                'Step 4: Finalizing results...'
+                'Step 2: Filtering AI-relevant articles...',
+                'Step 3: Clustering articles by topic...',
+                'Step 4: Generating AI summaries...',
+                'Step 5: Finalizing results...'
             ];
             
             let stepIndex = 0;
@@ -211,19 +202,32 @@
                     },
                     body: JSON.stringify({
                         sources: sources,
-                        days_back: days_back,
-                        max_clusters: max_clusters
+                        days_back: days_back
                     })
                 });
 
                 clearInterval(stepInterval);
 
                 if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.detail || `HTTP ${response.status}`);
+                    let errorMessage = `HTTP ${response.status}`;
+                    try {
+                        const error = await response.json();
+                        errorMessage = error.detail || errorMessage;
+                    } catch (e) {
+                        console.error('Failed to parse error response:', e);
+                    }
+                    throw new Error(errorMessage);
                 }
 
-                const result = await response.json();
+                let result;
+                try {
+                    result = await response.json();
+                    console.log('Raw API response:', result);
+                } catch (e) {
+                    console.error('Failed to parse JSON response:', e);
+                    throw new Error('Invalid JSON response from server');
+                }
+                
                 displayResults(result);
                 
             } catch (error) {
@@ -234,6 +238,14 @@
         }
 
         function displayResults(result) {
+            console.log('Received result:', result); // Debug log
+            
+            // Check if result is valid
+            if (!result || !result.clusters || !Array.isArray(result.clusters)) {
+                showError('Invalid response format from server');
+                return;
+            }
+
             document.getElementById('loading').style.display = 'none';
             document.getElementById('results').style.display = 'block';
 
@@ -241,9 +253,9 @@
             const summaryStats = document.getElementById('summary-stats');
             summaryStats.innerHTML = `
                 <div class="row">
-                    <div class="col-md-4"><span style="font-weight:600;">${result.total_articles}</span> articles analyzed</div>
+                    <div class="col-md-4"><span style="font-weight:600;">${result.total_articles || 0}</span> articles analyzed</div>
                     <div class="col-md-4"><span style="font-weight:600;">${result.clusters.length}</span> topic clusters</div>
-                    <div class="col-md-4">Processing time: <span style="font-weight:600;">${result.processing_time.toFixed(2)}s</span></div>
+                    <div class="col-md-4">Processing time: <span style="font-weight:600;">${(result.processing_time || 0).toFixed(2)}s</span></div>
                 </div>
             `;
 
@@ -251,25 +263,46 @@
             const clustersContainer = document.getElementById('clusters-container');
             clustersContainer.innerHTML = '';
 
-            result.clusters.forEach((cluster) => {
+            result.clusters.forEach((cluster, index) => {
+                console.log(`Processing cluster ${index}:`, cluster); // Debug log
+                
+                // Safety checks for cluster properties
+                const topicName = cluster?.topic_name || 'Unknown Topic';
+                const articleCount = cluster?.article_count || 0;
+                const summary = cluster?.summary || 'Summary not available';
+                const sources = Array.isArray(cluster?.sources) ? cluster.sources : [];
+                
+                console.log(`Cluster ${index} sources:`, sources); // Debug log
+                
+                // Build sources HTML safely
+                let sourcesHtml = '';
+                if (sources && sources.length > 0) {
+                    try {
+                        sourcesHtml = sources.map(source => {
+                            const safeSource = source && typeof source === 'string' ? source : 'Unknown source';
+                            const displayText = safeSource.length > 40 ? safeSource.substring(0, 40) + '...' : safeSource;
+                            const href = safeSource !== 'Unknown source' ? safeSource : '#';
+                            return `<a href="${href}" target="_blank" class="badge bg-dark text-decoration-none" style="color: white; border-radius: 8px; padding: 6px 12px;">${displayText}</a>`;
+                        }).join('');
+                    } catch (e) {
+                        console.error('Error building sources HTML:', e, 'Sources:', sources);
+                        sourcesHtml = '<span class="text-muted">Sources not available</span>';
+                    }
+                } else {
+                    sourcesHtml = '<span class="text-muted">No sources available</span>';
+                }
+                
                 const clusterCard = document.createElement('div');
                 clusterCard.className = 'card cluster-card';
                 clusterCard.innerHTML = `
                     <div class="card-header bg-white border-bottom-0">
-                        <span class="cluster-topic">${cluster.topic_name}</span>
-                        <span class="badge badge-primary float-end">${cluster.article_count} articles</span>
+                        <span class="cluster-topic">${topicName}</span>
+                        <span class="badge badge-primary float-end">${articleCount} articles</span>
                     </div>
                     <div class="card-body">
-                        <div class="mb-2" style="color:#333;font-size:1.05em;">${cluster.summary}</div>
-                        <ul class="mb-2">
-                            ${cluster.key_points.map(point => `<li>${point}</li>`).join('')}
-                        </ul>
+                        <div class="mb-3" style="color:#333;font-size:1.05em;line-height:1.6;">${summary}</div>
                         <div class="d-flex flex-wrap gap-2">
-                            ${cluster.sources.map(source => `
-                                <a href="${source}" target="_blank" class="badge bg-dark text-decoration-none" style="color: white; border-radius: 8px; padding: 6px 12px;">
-                                    ${source.length > 40 ? source.substring(0, 40) + '...' : source}
-                                </a>
-                            `).join('')}
+                            ${sourcesHtml}
                         </div>
                     </div>
                 `;
