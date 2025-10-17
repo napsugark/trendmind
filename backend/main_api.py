@@ -1,21 +1,3 @@
-#!/usr/bin/env python3
-"""
-TrendMind Backend API
-
-Provides AI-powered trend analysis through a complete workflow:
-1. Data Collection (Scraping)
-2. Topic Clustering (LLM)
-3. Summarization (LLM) 
-4. Structured Results
-
-Usage:
-    python main_api.py
-    
-Then visit:
-    - API Docs: http://localhost:8000/docs
-    - Health Check: http://localhost:8000/health
-"""
-
 import os
 import sys
 from datetime import datetime, timedelta
@@ -170,7 +152,12 @@ async def analyze_trends(
         # Collect all articles
         all_articles = []
         for source_result in scrape_result['sources']:
-            all_articles.extend(source_result['articles'])
+            # Filter out None or invalid articles
+            valid_articles = [
+                article for article in source_result['articles'] 
+                if article and isinstance(article, dict)
+            ]
+            all_articles.extend(valid_articles)
         
         if not all_articles:
             return AnalyzeResponse(

@@ -159,9 +159,14 @@ def quick_ai_keyword_filter(articles: List[Dict[str, Any]]) -> List[Dict[str, An
     
     filtered_articles = []
     
-    for article in articles:
-        title = article.get('title', '').lower()
-        content = article.get('content', '').lower()
+    for i, article in enumerate(articles):
+        # Skip None articles or articles without required structure
+        if not article or not isinstance(article, dict):
+            logger.warning(f"Skipping invalid article at index {i}: {type(article)}")
+            continue
+            
+        title = (article.get('title') or '').lower()
+        content = (article.get('content') or '').lower()
         combined_text = f"{title} {content}"
         
         # Check if any AI keyword is present
@@ -169,9 +174,12 @@ def quick_ai_keyword_filter(articles: List[Dict[str, Any]]) -> List[Dict[str, An
         
         if has_ai_keyword:
             filtered_articles.append(article)
-            logger.debug(f"Keyword match: {article.get('title', 'No Title')[:50]}...")
+            # Handle tweets (no title) vs articles (with title)
+            display_text = article.get('title') or article.get('content', 'No Content')
+            logger.debug(f"Keyword match: {display_text[:50]}...")
         else:
-            logger.debug(f"No AI keywords: {article.get('title', 'No Title')[:50]}...")
+            display_text = article.get('title') or article.get('content', 'No Content')
+            logger.debug(f"No AI keywords: {display_text[:50]}...")
     
     logger.info(f"Keyword filtering complete: {len(filtered_articles)} articles passed out of {len(articles)} total ({len(filtered_articles)/len(articles)*100:.1f}%)")
     

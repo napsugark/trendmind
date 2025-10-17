@@ -217,84 +217,84 @@ Keep it concise but informative."""
         }
 
 
-@observe()
-@log_performance
-def generate_final_overview(cluster_summaries: List[Dict[str, Any]], top_n: int = 5) -> str:
-    """
-    Generate final overview of top N trending topics.
+# @observe()
+# @log_performance
+# def generate_final_overview(cluster_summaries: List[Dict[str, Any]], top_n: int = 5) -> str:
+#     """
+#     Generate final overview of top N trending topics.
     
-    Args:
-        cluster_summaries: List of cluster summary dictionaries
-        top_n: Number of top topics to include
+#     Args:
+#         cluster_summaries: List of cluster summary dictionaries
+#         top_n: Number of top topics to include
         
-    Returns:
-        Formatted string with top trending topics
-    """
-    logger = get_logger("clustering")
-    logger.info(f"Generating final overview of top {top_n} topics from {len(cluster_summaries)} clusters")
+#     Returns:
+#         Formatted string with top trending topics
+#     """
+#     logger = get_logger("clustering")
+#     logger.info(f"Generating final overview of top {top_n} topics from {len(cluster_summaries)} clusters")
     
-    # Sort by article count to get top trending
-    sorted_clusters = sorted(cluster_summaries, key=lambda x: x['article_count'], reverse=True)
-    top_clusters = sorted_clusters[:top_n]
+#     # Sort by article count to get top trending
+#     sorted_clusters = sorted(cluster_summaries, key=lambda x: x['article_count'], reverse=True)
+#     top_clusters = sorted_clusters[:top_n]
     
-    # Prepare input for LLM
-    cluster_info = []
-    for i, cluster in enumerate(top_clusters):
-        cluster_info.append({
-            "rank": i + 1,
-            "topic": cluster['topic_name'],
-            "articles": cluster['article_count'],
-            "summary": cluster['summary'],
-            "sources": cluster.get('key_sources', [])[:3]
-        })
+#     # Prepare input for LLM
+#     cluster_info = []
+#     for i, cluster in enumerate(top_clusters):
+#         cluster_info.append({
+#             "rank": i + 1,
+#             "topic": cluster['topic_name'],
+#             "articles": cluster['article_count'],
+#             "summary": cluster['summary'],
+#             "sources": cluster.get('key_sources', [])[:3]
+#         })
     
-    prompt = f"""Create a final overview of the top {top_n} trending AI topics based on the following cluster summaries:
+#     prompt = f"""Create a final overview of the top {top_n} trending AI topics based on the following cluster summaries:
 
-{json.dumps(cluster_info, indent=2)}
+# {json.dumps(cluster_info, indent=2)}
 
-Format the output as:
+# Format the output as:
 
-**Overview**
-[2-3 sentence overview of the overall landscape]
+# **Overview**
+# [2-3 sentence overview of the overall landscape]
 
-**Top {top_n} Trending Topics:**
+# **Top {top_n} Trending Topics:**
 
-1. **[Topic Name]** ({len} articles)
-   [3-4 sentence summary]
+# 1. **[Topic Name]** ({len} articles)
+#    [3-4 sentence summary]
    
-   Key sources: [list sources]
+#    Key sources: [list sources]
 
-2. **[Topic Name]** ({len} articles)
-   ...
+# 2. **[Topic Name]** ({len} articles)
+#    ...
 
-Make it engaging and insightful. Highlight connections between topics if relevant."""
+# Make it engaging and insightful. Highlight connections between topics if relevant."""
 
-    try:
-        logger.debug("Generating final overview")
+#     try:
+#         logger.debug("Generating final overview")
         
-        response = client.chat.completions.create(
-            model=DEPLOYMENT,
-            messages=[
-                {"role": "system", "content": "You are an expert at synthesizing AI news trends into clear, compelling narratives."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=1500
-        )
+#         response = client.chat.completions.create(
+#             model=DEPLOYMENT,
+#             messages=[
+#                 {"role": "system", "content": "You are an expert at synthesizing AI news trends into clear, compelling narratives."},
+#                 {"role": "user", "content": prompt}
+#             ],
+#             temperature=0.7,
+#             max_tokens=1500
+#         )
         
-        overview = response.choices[0].message.content
+#         overview = response.choices[0].message.content
         
-        logger.info(f"Generated final overview: {len(overview)} chars")
+#         logger.info(f"Generated final overview: {len(overview)} chars")
         
-        return overview
+#         return overview
         
-    except Exception as e:
-        logger.error(f"Failed to generate final overview: {str(e)}")
+#     except Exception as e:
+#         logger.error(f"Failed to generate final overview: {str(e)}")
         
-        # Fallback: simple formatting
-        fallback = f"**Top {top_n} Trending AI Topics**\n\n"
-        for i, cluster in enumerate(top_clusters):
-            fallback += f"{i+1}. **{cluster['topic_name']}** ({cluster['article_count']} articles)\n"
-            fallback += f"   {cluster['summary'][:200]}...\n\n"
+#         # Fallback: simple formatting
+#         fallback = f"**Top {top_n} Trending AI Topics**\n\n"
+#         for i, cluster in enumerate(top_clusters):
+#             fallback += f"{i+1}. **{cluster['topic_name']}** ({cluster['article_count']} articles)\n"
+#             fallback += f"   {cluster['summary'][:200]}...\n\n"
         
-        return fallback
+#         return fallback
