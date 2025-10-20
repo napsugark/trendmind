@@ -181,16 +181,20 @@
             const steps = [
                 'Step 1: Scraping data from sources...',
                 'Step 2: Filtering AI-relevant articles...',
-                'Step 3: Clustering articles by topic...',
-                'Step 4: Generating AI summaries...',
-                'Step 5: Finalizing results...'
+                'Step 3: Summarizing individual articles...',
+                'Step 4: Clustering articles by topic...',
+                'Step 5: Generating cluster summaries...',
+                'Step 6: Finalizing results...'
             ];
             
             let stepIndex = 0;
+            // Display the first step immediately
+            document.getElementById('loading-step').textContent = steps[stepIndex];
+            
             const stepInterval = setInterval(() => {
+                stepIndex++;
                 if (stepIndex < steps.length) {
                     document.getElementById('loading-step').textContent = steps[stepIndex];
-                    stepIndex++;
                 }
             }, 2000);
 
@@ -251,9 +255,12 @@
 
             // Summary stats
             const summaryStats = document.getElementById('summary-stats');
+            // Calculate actual articles summarized (sum of articles in all clusters)
+            const actualArticlesSummarized = result.clusters.reduce((total, cluster) => total + (cluster.article_count || 0), 0);
+            
             summaryStats.innerHTML = `
                 <div class="row">
-                    <div class="col-md-4"><span style="font-weight:600;">${result.total_articles || 0}</span> articles analyzed</div>
+                    <div class="col-md-4"><span style="font-weight:600;">${actualArticlesSummarized}</span> articles summarized</div>
                     <div class="col-md-4"><span style="font-weight:600;">${result.clusters.length}</span> topic clusters</div>
                     <div class="col-md-4">Processing time: <span style="font-weight:600;">${(result.processing_time || 0).toFixed(2)}s</span></div>
                 </div>
