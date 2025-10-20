@@ -180,34 +180,39 @@ async def analyze_trends(
         # LLM-based AI relevance filter
         ai_articles = filter_ai_relevant_articles(keyword_filtered)
         
-        # Optional: Generate test dataset for evaluation 
-        from src.test_dataset_generator import create_ai_filter_test_dataset
-        test_dataset_path = create_ai_filter_test_dataset(all_articles)
-        logger.info(f"Test dataset created: {test_dataset_path}")
+        # # Optional: Generate test dataset for evaluation 
+        # from backend.utils.test_dataset_generator import create_ai_filter_test_dataset
+        # test_dataset_path = create_ai_filter_test_dataset(all_articles)
+        # logger.info(f"Test dataset created: {test_dataset_path}")
         
-        if not ai_articles:
-            logger.warning("No AI-relevant articles found after filtering")
-            return AnalyzeResponse(
-                success=True,
-                clusters=[],
-                total_articles=len(all_articles),
-                processing_time=time.time() - start_time,
-                timestamp=datetime.utcnow().isoformat()
-            )
+        # if not ai_articles:
+        #     logger.warning("No AI-relevant articles found after filtering")
+        #     return AnalyzeResponse(
+        #         success=True,
+        #         clusters=[],
+        #         total_articles=len(all_articles),
+        #         processing_time=time.time() - start_time,
+        #         timestamp=datetime.utcnow().isoformat()
+        #     )
         
-        logger.info(f"Filtered to {len(ai_articles)} AI-relevant articles ({len(ai_articles)/len(all_articles)*100:.1f}%)")
+        # logger.info(f"Filtered to {len(ai_articles)} AI-relevant articles ({len(ai_articles)/len(all_articles)*100:.1f}%)")
         
-        # Step 3: Cluster articles by topic
+        # Step 3: Summarize individual articles
+        logger.info(f"Step 3: Summarizing {len(ai_articles)} individual articles...")
+        from src.clustering import summarize_articles_batch
+        summarized_articles = summarize_articles_batch(ai_articles)
+        
+        # Step 4: Cluster articles by topic using summaries
         # Adjust max_clusters based on article count to avoid empty clusters
-        dynamic_max_clusters = min(max_clusters, max(1, len(ai_articles) // 2))  # At least 2 articles per cluster
-        logger.info(f"Step 3: Clustering articles by topic (max {dynamic_max_clusters} clusters for {len(ai_articles)} articles)...")
-        clusters = cluster_articles(ai_articles, max_clusters=dynamic_max_clusters)
+        dynamic_max_clusters = min(max_clusters, max(1, len(summarized_articles) // 2))  # At least 2 articles per cluster
+        logger.info(f"Step 4: Clustering articles by topic (max {dynamic_max_clusters} clusters for {len(summarized_articles)} articles)...")
+        clusters = cluster_articles(summarized_articles, max_clusters=dynamic_max_clusters)
         
-        # Step 4: Summarize each cluster
-        logger.info("Step 4: Generating cluster summaries...")
+        # Step 5: Summarize each cluster
+        logger.info("Step 5: Generating cluster summaries...")
         cluster_summaries = summarize_clusters(clusters)
         
-        # Step 4: Format response
+        # Step 6: Format response
         response_clusters = []
         for cluster_summary in cluster_summaries:
             response_clusters.append(ClusterSummary(
